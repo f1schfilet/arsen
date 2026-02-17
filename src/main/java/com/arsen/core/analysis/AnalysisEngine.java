@@ -30,6 +30,7 @@ public class AnalysisEngine {
         analysisPasses.add(new ControlFlowAnalysisPass());
         analysisPasses.add(new CrossReferencePass());
         analysisPasses.add(new StringAnalysisPass());
+        analysisPasses.add(new PseudocodeGenerationPass());
     }
 
     public CompletableFuture<AnalysisResult> analyze(BinaryFile binaryFile) {

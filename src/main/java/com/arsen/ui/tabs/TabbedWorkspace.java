@@ -9,17 +9,20 @@ import javax.swing.*;
 @Getter
 public class TabbedWorkspace extends JTabbedPane {
     private final DisassemblyTab disassemblyTab;
+    private final PseudocodeTab pseudocodeTab;
     private final HexViewTab hexViewTab;
     private final StringsTab stringsTab;
     private final SectionsTab sectionsTab;
 
     public TabbedWorkspace() {
         this.disassemblyTab = new DisassemblyTab();
+        this.pseudocodeTab = new PseudocodeTab();
         this.hexViewTab = new HexViewTab();
         this.stringsTab = new StringsTab();
         this.sectionsTab = new SectionsTab();
 
         addTab("Disassembly", disassemblyTab);
+        addTab("Pseudocode", pseudocodeTab);
         addTab("Hex View", hexViewTab);
         addTab("Strings", stringsTab);
         addTab("Sections", sectionsTab);
@@ -27,17 +30,23 @@ public class TabbedWorkspace extends JTabbedPane {
 
     public void setBinary(BinaryFile binary) {
         disassemblyTab.setBinary(binary);
+        pseudocodeTab.setBinary(binary);
         hexViewTab.setBinary(binary);
         sectionsTab.setBinary(binary);
     }
 
     public void setAnalysisResult(AnalysisResult result) {
         disassemblyTab.setAnalysisResult(result);
+        pseudocodeTab.setAnalysisResult(result);
         stringsTab.setStrings(result.getStrings());
     }
 
     public void showDisassemblyTab() {
         setSelectedComponent(disassemblyTab);
+    }
+
+    public void showPseudocodeTab() {
+        setSelectedComponent(pseudocodeTab);
     }
 
     public void showHexTab() {

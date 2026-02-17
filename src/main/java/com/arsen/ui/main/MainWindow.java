@@ -46,7 +46,6 @@ public class MainWindow extends JFrame implements EventListener {
         setSize(1400, 900);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
-
         setJMenuBar(createMenuBar());
 
         setLayout(new BorderLayout());
@@ -84,9 +83,15 @@ public class MainWindow extends JFrame implements EventListener {
         menuBar.add(analysisMenu);
 
         JMenu viewMenu = new JMenu("View");
+
         JMenuItem disassemblyItem = new JMenuItem("Disassembly");
         disassemblyItem.addActionListener(e -> workspace.showDisassemblyTab());
         viewMenu.add(disassemblyItem);
+
+        JMenuItem pseudocodeItem = new JMenuItem("Pseudocode");
+        pseudocodeItem.addActionListener(e -> workspace.showPseudocodeTab());
+        pseudocodeItem.setAccelerator(KeyStroke.getKeyStroke("control P"));
+        viewMenu.add(pseudocodeItem);
 
         JMenuItem hexItem = new JMenuItem("Hex View");
         hexItem.addActionListener(e -> workspace.showHexTab());
@@ -95,6 +100,7 @@ public class MainWindow extends JFrame implements EventListener {
         JMenuItem stringsItem = new JMenuItem("Strings");
         stringsItem.addActionListener(e -> workspace.showStringsTab());
         viewMenu.add(stringsItem);
+
         menuBar.add(viewMenu);
 
         return menuBar;
@@ -163,6 +169,8 @@ public class MainWindow extends JFrame implements EventListener {
                 statusBar.setStatus("Analysis progress: " + progress + "%");
             } else if (event.type() == EventType.ERROR_OCCURRED) {
                 statusBar.setStatus("Error: " + event.payload());
+            } else if (event.type() == EventType.PSEUDOCODE_GENERATED) {
+                statusBar.setStatus("Pseudocode generated");
             }
         });
     }
