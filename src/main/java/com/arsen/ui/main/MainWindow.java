@@ -7,6 +7,8 @@ import com.arsen.core.event.EventType;
 import com.arsen.service.BinaryService;
 import com.arsen.ui.actions.FileActions;
 import com.arsen.ui.components.StatusBar;
+import com.arsen.ui.panels.LeftSidebarPanel;
+import com.arsen.ui.panels.RightBottomPanel;
 import com.arsen.ui.tabs.TabbedWorkspace;
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,6 +30,8 @@ public class MainWindow extends JFrame implements EventListener {
     private final TabbedWorkspace workspace;
     private final StatusBar statusBar;
     private final FileActions fileActions;
+    private final LeftSidebarPanel leftSidebar;
+    private final RightBottomPanel rightBottomPanel;
 
     public MainWindow(BinaryService binaryService) {
         this.binaryService = binaryService;
@@ -35,7 +39,8 @@ public class MainWindow extends JFrame implements EventListener {
         this.workspace = new TabbedWorkspace();
         this.statusBar = new StatusBar();
         this.fileActions = new FileActions(this, binaryService);
-
+        this.leftSidebar = new LeftSidebarPanel();
+        this.rightBottomPanel = new RightBottomPanel();
         initializeUI();
         setupDragAndDrop();
         eventBus.subscribe(this);
@@ -43,16 +48,34 @@ public class MainWindow extends JFrame implements EventListener {
 
     private void initializeUI() {
         setTitle("Arsen");
-        setSize(1400, 900);
+        setSize(1600, 1000);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setJMenuBar(createMenuBar());
-
         setLayout(new BorderLayout());
-        add(workspace, BorderLayout.CENTER);
+
+        JSplitPane mainSplitPane = createMainLayout();
+        add(mainSplitPane, BorderLayout.CENTER);
         add(statusBar, BorderLayout.SOUTH);
 
         setupLookAndFeel();
+    }
+
+    private JSplitPane createMainLayout() {
+        JSplitPane leftSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        leftSplit.setLeftComponent(leftSidebar);
+        leftSplit.setDividerLocation(250);
+        leftSplit.setResizeWeight(0.0);
+
+        JSplitPane centerRightSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        centerRightSplit.setTopComponent(workspace);
+        centerRightSplit.setBottomComponent(rightBottomPanel);
+        centerRightSplit.setDividerLocation(700);
+        centerRightSplit.setResizeWeight(0.8);
+
+        leftSplit.setRightComponent(centerRightSplit);
+
+        return leftSplit;
     }
 
     private void setupLookAndFeel() {
@@ -83,7 +106,6 @@ public class MainWindow extends JFrame implements EventListener {
         menuBar.add(analysisMenu);
 
         JMenu viewMenu = new JMenu("View");
-
         JMenuItem disassemblyItem = new JMenuItem("Disassembly");
         disassemblyItem.addActionListener(e -> workspace.showDisassemblyTab());
         viewMenu.add(disassemblyItem);
@@ -132,6 +154,7 @@ public class MainWindow extends JFrame implements EventListener {
         binaryService.loadBinary(path).thenAccept(binary -> SwingUtilities.invokeLater(() -> {
             statusBar.setStatus("Binary loaded successfully");
             workspace.setBinary(binary);
+            leftSidebar.setBinary(binary);
         })).exceptionally(ex -> {
             SwingUtilities.invokeLater(() -> {
                 statusBar.setStatus("Failed to load binary");
@@ -152,6 +175,8 @@ public class MainWindow extends JFrame implements EventListener {
         binaryService.analyze().thenAccept(result -> SwingUtilities.invokeLater(() -> {
             statusBar.setStatus("Analysis completed");
             workspace.setAnalysisResult(result);
+            leftSidebar.setAnalysisResult(result);
+            rightBottomPanel.setAnalysisResult(result);
         })).exceptionally(ex -> {
             SwingUtilities.invokeLater(() -> {
                 statusBar.setStatus("Analysis failed");
