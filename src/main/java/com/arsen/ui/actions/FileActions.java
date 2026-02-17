@@ -6,6 +6,7 @@ import lombok.Getter;
 import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.io.File;
+import java.nio.file.Path;
 
 @Getter
 public class FileActions {
@@ -26,6 +27,14 @@ public class FileActions {
         this.exitAction = new ExitAction();
     }
 
+    public void openFile(Path path) {
+        if (path != null && path.toFile().exists()) {
+            binaryService.loadBinary(path);
+        } else {
+            JOptionPane.showMessageDialog(parent, "File does not exist: " + path, "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
     private class OpenAction extends AbstractAction {
         public OpenAction() {
             super("Open Binary...");
@@ -40,7 +49,7 @@ public class FileActions {
             int result = fileChooser.showOpenDialog(parent);
             if (result == JFileChooser.APPROVE_OPTION) {
                 File file = fileChooser.getSelectedFile();
-                binaryService.loadBinary(file.toPath());
+                openFile(file.toPath());
             }
         }
     }

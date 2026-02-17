@@ -1,9 +1,9 @@
 package com.arsen.ui.main;
 
+import com.arsen.core.analysis.AnalysisResult;
 import com.arsen.core.event.Event;
 import com.arsen.core.event.EventBus;
 import com.arsen.core.event.EventListener;
-import com.arsen.core.event.EventType;
 import com.arsen.service.BinaryService;
 import com.arsen.ui.actions.FileActions;
 import com.arsen.ui.components.StatusBar;
@@ -20,7 +20,6 @@ import java.awt.dnd.DropTarget;
 import java.awt.dnd.DropTargetAdapter;
 import java.awt.dnd.DropTargetDropEvent;
 import java.io.File;
-import java.nio.file.Path;
 import java.util.List;
 
 @Slf4j
@@ -106,9 +105,15 @@ public class MainWindow extends JFrame implements EventListener {
         menuBar.add(analysisMenu);
 
         JMenu viewMenu = new JMenu("View");
+
         JMenuItem disassemblyItem = new JMenuItem("Disassembly");
         disassemblyItem.addActionListener(e -> workspace.showDisassemblyTab());
         viewMenu.add(disassemblyItem);
+
+        JMenuItem graphViewItem = new JMenuItem("Graph View");
+        graphViewItem.addActionListener(e -> workspace.showGraphViewTab());
+        graphViewItem.setAccelerator(KeyStroke.getKeyStroke("control G"));
+        viewMenu.add(graphViewItem);
 
         JMenuItem pseudocodeItem = new JMenuItem("Pseudocode");
         pseudocodeItem.addActionListener(e -> workspace.showPseudocodeTab());
@@ -135,52 +140,33 @@ public class MainWindow extends JFrame implements EventListener {
                 try {
                     dtde.acceptDrop(DnDConstants.ACTION_COPY);
                     List<File> files = (List<File>) dtde.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
-
                     if (!files.isEmpty()) {
-                        loadBinary(files.getFirst().toPath());
+                        fileActions.openFile(files.getFirst().toPath());
                     }
                     dtde.dropComplete(true);
-                } catch (Exception e) {
-                    log.error("Error handling dropped file", e);
+                } catch (Exception ex) {
+                    log.error("Drag and drop failed", ex);
                     dtde.dropComplete(false);
                 }
             }
         });
     }
 
-    private void loadBinary(Path path) {
-        statusBar.setStatus("Loading binary: " + path.getFileName());
-
-        binaryService.loadBinary(path).thenAccept(binary -> SwingUtilities.invokeLater(() -> {
-            statusBar.setStatus("Binary loaded successfully");
-            workspace.setBinary(binary);
-            leftSidebar.setBinary(binary);
-        })).exceptionally(ex -> {
-            SwingUtilities.invokeLater(() -> {
-                statusBar.setStatus("Failed to load binary");
-                JOptionPane.showMessageDialog(this, "Failed to load binary: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            });
-            return null;
-        });
-    }
-
     private void analyzeBinary() {
         if (binaryService.getCurrentBinary() == null) {
-            JOptionPane.showMessageDialog(this, "Please load a binary first", "No Binary Loaded", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "No binary loaded", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
         statusBar.setStatus("Analyzing binary...");
-
-        binaryService.analyze().thenAccept(result -> SwingUtilities.invokeLater(() -> {
-            statusBar.setStatus("Analysis completed");
-            workspace.setAnalysisResult(result);
-            leftSidebar.setAnalysisResult(result);
-            rightBottomPanel.setAnalysisResult(result);
-        })).exceptionally(ex -> {
+        binaryService.analyze().thenAccept(result -> {
+            SwingUtilities.invokeLater(() -> {
+                statusBar.setStatus("Analysis complete");
+            });
+        }).exceptionally(ex -> {
             SwingUtilities.invokeLater(() -> {
                 statusBar.setStatus("Analysis failed");
-                JOptionPane.showMessageDialog(this, "Analysis failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                log.error("Analysis failed", ex);
             });
             return null;
         });
@@ -188,15 +174,44 @@ public class MainWindow extends JFrame implements EventListener {
 
     @Override
     public void onEvent(Event event) {
-        SwingUtilities.invokeLater(() -> {
-            if (event.type() == EventType.ANALYSIS_PROGRESS) {
-                int progress = (Integer) event.payload();
-                statusBar.setStatus("Analysis progress: " + progress + "%");
-            } else if (event.type() == EventType.ERROR_OCCURRED) {
-                statusBar.setStatus("Error: " + event.payload());
-            } else if (event.type() == EventType.PSEUDOCODE_GENERATED) {
-                statusBar.setStatus("Pseudocode generated");
-            }
-        });
+        switch (event.type()) {
+            case BINARY_LOADED:
+                SwingUtilities.invokeLater(() -> {
+                    workspace.setBinary(binaryService.getCurrentBinary());
+                    leftSidebar.setBinary(binaryService.getCurrentBinary());
+                    statusBar.setStatus("Binary loaded: " + binaryService.getCurrentBinary().getFilePath().getFileName());
+                });
+                break;
+
+            case ANALYSIS_STARTED:
+                SwingUtilities.invokeLater(() -> statusBar.setStatus("Analysis started..."));
+                break;
+
+            case ANALYSIS_PROGRESS:
+                Integer progress = (Integer) event.payload();
+                SwingUtilities.invokeLater(() -> statusBar.setStatus("Analysis progress: " + progress + "%"));
+                break;
+
+            case ANALYSIS_COMPLETED:
+                AnalysisResult result = (AnalysisResult) event.payload();
+                SwingUtilities.invokeLater(() -> {
+                    workspace.setAnalysisResult(result);
+                    leftSidebar.setAnalysisResult(result);
+                    rightBottomPanel.setAnalysisResult(result);
+                    statusBar.setStatus("Analysis completed: " + result.getFunctions().size() + " functions found");
+                });
+                break;
+
+            case ERROR_OCCURRED:
+                String error = event.payload() != null ? event.payload().toString() : "Unknown error";
+                SwingUtilities.invokeLater(() -> {
+                    statusBar.setStatus("Error: " + error);
+                    JOptionPane.showMessageDialog(this, error, "Error", JOptionPane.ERROR_MESSAGE);
+                });
+                break;
+
+            default:
+                break;
+        }
     }
 }
