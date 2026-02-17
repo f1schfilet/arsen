@@ -166,7 +166,7 @@ public class FunctionDetectionPass implements AnalysisPass {
 
             if (blockStarts.contains(addr)) {
                 if (currentBuilder != null) {
-                    blockBuilders.put(currentBlockStart, BasicBlock.builder());
+                    blockBuilders.put(currentBlockStart, currentBuilder);
                 }
 
                 currentBlockStart = addr;
@@ -181,7 +181,7 @@ public class FunctionDetectionPass implements AnalysisPass {
             if (instr.getType() == InstructionType.JUMP || instr.getType() == InstructionType.CONDITIONAL_JUMP || instr.getType() == InstructionType.RETURN) {
 
                 if (currentBuilder != null) {
-                    blockBuilders.put(currentBlockStart, BasicBlock.builder());
+                    blockBuilders.put(currentBlockStart, currentBuilder);
                     currentBuilder = null;
                     currentBlockStart = null;
                 }
@@ -189,7 +189,7 @@ public class FunctionDetectionPass implements AnalysisPass {
         }
 
         if (currentBuilder != null) {
-            blockBuilders.put(currentBlockStart, BasicBlock.builder());
+            blockBuilders.put(currentBlockStart, currentBuilder);
         }
 
         for (Map.Entry<Address, BasicBlock.BasicBlockBuilder> entry : blockBuilders.entrySet()) {
@@ -240,6 +240,6 @@ public class FunctionDetectionPass implements AnalysisPass {
     }
 
     private String formatFunctionName(Address address) {
-        return String.format("sub_%016X", address.value()).toUpperCase();
+        return String.format("SUB_%016X", address.value()).toUpperCase();
     }
 }

@@ -29,7 +29,7 @@ public class PseudocodePlugin implements Plugin {
     @Override
     public void initialize(PluginContext context) {
         this.context = context;
-        this.pseudocodeService = new PseudocodeService();
+        this.pseudocodeService = PseudocodeService.getInstance();
         log.info("Pseudocode plugin initialized");
     }
 

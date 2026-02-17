@@ -27,7 +27,7 @@ public class PseudocodeTab extends JPanel {
     private AnalysisResult analysisResult;
 
     public PseudocodeTab() {
-        this.pseudocodeService = new PseudocodeService();
+        this.pseudocodeService = PseudocodeService.getInstance();
         this.document = new DefaultStyledDocument();
         this.textPane = new JTextPane(document);
         this.highlighter = new PseudocodeHighlighter(document);
@@ -97,17 +97,23 @@ public class PseudocodeTab extends JPanel {
             return;
         }
 
-        Function function = selectedItem.function();
+        Function function = selectedItem.function;
         displayPseudocode(function);
     }
 
     private void displayPseudocode(Function function) {
         try {
             String pseudocode = pseudocodeService.generatePseudocode(function);
+
+            if (pseudocode == null || pseudocode.trim().isEmpty()) {
+                displayError("No pseudocode available for function: " + function.getName());
+                return;
+            }
+
             highlighter.highlight(pseudocode);
             textPane.setCaretPosition(0);
         } catch (Exception e) {
-            log.error("Failed to generate pseudocode for function: {}", function.getName(), e);
+            log.error("Failed to generate pseudocode for function {}", function.getName(), e);
             displayError("Failed to generate pseudocode: " + e.getMessage());
         }
     }
@@ -130,18 +136,14 @@ public class PseudocodeTab extends JPanel {
     }
 
     public void navigateToFunction(Address address) {
-        if (analysisResult == null) {
-            return;
-        }
+        if (analysisResult == null) return;
 
         Function function = analysisResult.getFunctions().get(address);
-        if (function == null) {
-            return;
-        }
+        if (function == null) return;
 
         for (int i = 0; i < functionSelector.getItemCount(); i++) {
             FunctionItem item = functionSelector.getItemAt(i);
-            if (item.function().getAddress().equals(address)) {
+            if (item.function.getAddress().equals(address)) {
                 functionSelector.setSelectedIndex(i);
                 break;
             }
@@ -149,11 +151,9 @@ public class PseudocodeTab extends JPanel {
     }
 
     private record FunctionItem(Function function) {
-
         @Override
         public String toString() {
             return String.format("%s (%s)", function.getName() != null ? function.getName() : "unnamed", function.getAddress().toString());
         }
     }
 }
-

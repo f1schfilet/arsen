@@ -8,14 +8,20 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class PseudocodeService {
+    private static final PseudocodeService INSTANCE = new PseudocodeService();
+
     private final PseudocodeGenerator generator;
     private final SyntaxHighlighter highlighter;
     private final Map<Function, String> cache;
 
-    public PseudocodeService() {
+    private PseudocodeService() {
         this.generator = new PseudocodeGenerator();
         this.highlighter = new SyntaxHighlighter();
         this.cache = new ConcurrentHashMap<>();
+    }
+
+    public static PseudocodeService getInstance() {
+        return INSTANCE;
     }
 
     public String generatePseudocode(Function function) {

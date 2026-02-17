@@ -8,10 +8,8 @@ import java.util.Map;
 public class PseudocodeHighlighter {
     private final StyledDocument document;
     private final Map<String, Style> styles;
-
     private static final String[] KEYWORDS = {"if", "else", "while", "do", "for", "return", "break", "continue", "int", "void"};
-
-    private static final String[] OPERATORS = {"=", "+", "-", "*", "/", "&", "|", "^", "==", "!=", "<", ">", "<=", ">="};
+    private static final String[] OPERATORS = {"=", "+", "-", "*", "/", "%", "&", "|", "^", "!", "~", "<", ">", "==", "!=", "<=", ">="};
 
     public PseudocodeHighlighter(StyledDocument document) {
         this.document = document;
@@ -64,11 +62,9 @@ public class PseudocodeHighlighter {
         try {
             document.remove(0, document.getLength());
             String[] lines = text.split("\n");
-
             for (int i = 0; i < lines.length; i++) {
                 String line = lines[i];
                 highlightLine(line);
-
                 if (i < lines.length - 1) {
                     document.insertString(document.getLength(), "\n", null);
                 }
@@ -79,7 +75,7 @@ public class PseudocodeHighlighter {
     }
 
     private void highlightLine(String line) throws BadLocationException {
-        if (line.trim().startsWith("/*") || line.trim().startsWith("//")) {
+        if (line.trim().startsWith("//") || line.trim().startsWith("/*")) {
             document.insertString(document.getLength(), line, styles.get("comment"));
             return;
         }
@@ -138,7 +134,7 @@ public class PseudocodeHighlighter {
                     }
                 }
 
-                if (style == null && token.startsWith("sub_") || token.startsWith("func_")) {
+                if (style == null && (token.startsWith("sub_") || token.startsWith("func_"))) {
                     style = styles.get("function");
                 }
 
