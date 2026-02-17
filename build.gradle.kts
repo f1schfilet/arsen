@@ -15,6 +15,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-core:2.21.0")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.21.0")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.21.0")
+    implementation("com.fifesoft:rsyntaxtextarea:3.6.1")
     implementation("com.google.api:api-common:2.57.1")
     implementation("org.slf4j:slf4j-api:2.0.17")
     implementation(platform("com.fasterxml.jackson:jackson-bom:2.21.0"))

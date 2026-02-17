@@ -19,8 +19,13 @@ public class PseudocodeGenerator {
         StringBuilder sb = new StringBuilder();
         Indenter indenter = new Indenter(4);
 
-        String functionName = function.getName() != null ? function.getName() : String.format("func_%016X", function.getAddress().value());
+        String functionName = formatFunctionName(function);
         List<BasicBlock> basicBlocks = new ArrayList<>(function.getBasicBlocks());
+
+        if (basicBlocks.isEmpty()) {
+            return generateEmptyFunction(functionName);
+        }
+
         basicBlocks.sort(Comparator.comparing(BasicBlock::getStartAddress));
 
         Map<Address, BasicBlock> blockByAddress = new HashMap<>();
@@ -36,6 +41,8 @@ public class PseudocodeGenerator {
 
         VariableContext varCtx = new VariableContext();
 
+        collectVariables(basicBlocks, varCtx);
+
         List<String> locals = varCtx.getAllVariables();
         if (!locals.isEmpty()) {
             for (String local : locals) {
@@ -49,8 +56,38 @@ public class PseudocodeGenerator {
         emitRegion(region, sb, indenter, varCtx);
 
         indenter.unindent();
-        sb.append("}").append("\n");
+        sb.append("}");
         return sb.toString();
+    }
+
+    private void collectVariables(List<BasicBlock> basicBlocks, VariableContext varCtx) {
+        for (BasicBlock block : basicBlocks) {
+            for (Instruction instr : block.getInstructions()) {
+                for (Operand op : instr.getOperands()) {
+                    if (op.getType() == OperandType.REGISTER) {
+                        varCtx.variableForRegister(op.getText());
+                    } else if (op.getType() == OperandType.DISPLACEMENT) {
+                        varCtx.variableForStackOffset(op.getValue());
+                    } else if (op.getType() == OperandType.MEMORY) {
+                        varCtx.variableForMemory(op.getText(), op.getValue());
+                    }
+                }
+            }
+        }
+    }
+
+    private String formatFunctionName(Function function) {
+        if (function.getName() != null && function.getName().startsWith("sub_")) {
+            return function.getName();
+        }
+        return String.format("sub_%016X", function.getAddress().value()).toUpperCase();
+    }
+
+    private String generateEmptyFunction(String functionName) {
+        String sb = "int " + functionName + "()" + "\n" +
+                "{" + "\n" +
+                "}";
+        return sb;
     }
 
     private void emitRegion(StructuredRegion region, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
@@ -88,7 +125,7 @@ public class PseudocodeGenerator {
     }
 
     private void emitBasicBlock(BasicBlock block, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
-        if (block == null) {
+        if (block == null || block.getInstructions() == null) {
             return;
         }
         for (Instruction instr : block.getInstructions()) {
@@ -147,9 +184,7 @@ public class PseudocodeGenerator {
         }
 
         if ((mnemonic.startsWith("cmp") || mnemonic.startsWith("test")) && ops.size() == 2) {
-            String left = buildExpressionFromOperand(ops.get(0), varCtx);
-            String right = buildExpressionFromOperand(ops.get(1), varCtx);
-            return "/* compare " + left + " and " + right + " */";
+            return "";
         }
 
         if (mnemonic.startsWith("inc") && ops.size() == 1) {
@@ -162,28 +197,25 @@ public class PseudocodeGenerator {
             return dst + " = " + dst + " - 1";
         }
 
+        if (mnemonic.startsWith("push") && ops.size() == 1) {
+            return "";
+        }
+
+        if (mnemonic.startsWith("pop") && ops.size() == 1) {
+            String dst = buildLValue(ops.get(0), varCtx);
+            return dst + " = stack_pop()";
+        }
+
         return "";
     }
 
     private String operatorForMnemonic(String mnemonic) {
-        if (mnemonic.startsWith("add")) {
-            return "+";
-        }
-        if (mnemonic.startsWith("sub")) {
-            return "-";
-        }
-        if (mnemonic.startsWith("mul") || mnemonic.startsWith("imul")) {
-            return "*";
-        }
-        if (mnemonic.startsWith("and")) {
-            return "&";
-        }
-        if (mnemonic.startsWith("or")) {
-            return "|";
-        }
-        if (mnemonic.startsWith("xor")) {
-            return "^";
-        }
+        if (mnemonic.startsWith("add")) return "+";
+        if (mnemonic.startsWith("sub")) return "-";
+        if (mnemonic.startsWith("mul") || mnemonic.startsWith("imul")) return "*";
+        if (mnemonic.startsWith("and")) return "&";
+        if (mnemonic.startsWith("or")) return "|";
+        if (mnemonic.startsWith("xor")) return "^";
         return "+";
     }
 
@@ -191,26 +223,13 @@ public class PseudocodeGenerator {
         List<Operand> ops = instr.getOperands();
         String functionName;
         if (instr.getTargetAddress() != null) {
-            functionName = String.format("sub_%016X", instr.getTargetAddress().value());
+            functionName = String.format("sub_%016X", instr.getTargetAddress().value()).toUpperCase();
         } else if (!ops.isEmpty()) {
             functionName = buildExpressionFromOperand(ops.get(0), varCtx);
         } else {
             functionName = "unknown_call";
         }
-        List<String> args = new ArrayList<>();
-        for (int i = 1; i < ops.size(); i++) {
-            args.add(buildExpressionFromOperand(ops.get(i), varCtx));
-        }
-        StringBuilder sb = new StringBuilder();
-        sb.append(functionName).append("(");
-        for (int i = 0; i < args.size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
-            }
-            sb.append(args.get(i));
-        }
-        sb.append(")");
-        return sb.toString();
+        return functionName + "()";
     }
 
     private String buildLValue(Operand op, VariableContext varCtx) {
@@ -234,9 +253,7 @@ public class PseudocodeGenerator {
             return String.valueOf(op.getValue());
         }
         if (op.getType() == OperandType.MEMORY) {
-            String base = op.getText();
-            String var = varCtx.variableForMemory(base, op.getValue());
-            return var;
+            return varCtx.variableForMemory(op.getText(), op.getValue());
         }
         if (op.getType() == OperandType.DISPLACEMENT) {
             return varCtx.variableForStackOffset(op.getValue());
@@ -346,14 +363,14 @@ public class PseudocodeGenerator {
 
     private String generateFallback(Function function) {
         StringBuilder sb = new StringBuilder();
-        String functionName = function.getName() != null ? function.getName() : String.format("func_%016X", function.getAddress().value());
+        String functionName = formatFunctionName(function);
         sb.append("int ").append(functionName).append("()").append("\n");
         sb.append("{").append("\n");
         sb.append("    ").append("while (true)").append("\n");
         sb.append("    ").append("{").append("\n");
         sb.append("        ").append("break;").append("\n");
         sb.append("    ").append("}").append("\n");
-        sb.append("}").append("\n");
+        sb.append("}");
         return sb.toString();
     }
 
