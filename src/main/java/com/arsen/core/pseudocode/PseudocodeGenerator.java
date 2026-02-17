@@ -35,8 +35,8 @@ public class PseudocodeGenerator {
 
         ControlFlowGraph cfg = ControlFlowGraph.build(basicBlocks);
 
-        sb.append("int ").append(functionName).append("()").append("\n");
-        sb.append("{").append("\n");
+        sb.append("int ").append(functionName).append("()\n");
+        sb.append("{\n");
         indenter.indent();
 
         VariableContext varCtx = new VariableContext();
@@ -47,7 +47,7 @@ public class PseudocodeGenerator {
         if (!locals.isEmpty()) {
             for (String local : locals) {
                 appendIndent(sb, indenter);
-                sb.append("int ").append(local).append(";").append("\n");
+                sb.append("int ").append(local).append(";\n");
             }
             sb.append("\n");
         }
@@ -84,10 +84,7 @@ public class PseudocodeGenerator {
     }
 
     private String generateEmptyFunction(String functionName) {
-        String sb = "int " + functionName + "()" + "\n" +
-                "{" + "\n" +
-                "}";
-        return sb;
+        return "int " + functionName + "()\n{\n}";
     }
 
     private void emitRegion(StructuredRegion region, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
@@ -118,6 +115,9 @@ public class PseudocodeGenerator {
             case INFINITE_LOOP:
                 emitInfiniteLoop(region, sb, indenter, varCtx);
                 break;
+            case SWITCH:
+                emitSwitch(region, sb, indenter, varCtx);
+                break;
             default:
                 emitLinearFallback(region, sb, indenter, varCtx);
                 break;
@@ -139,9 +139,9 @@ public class PseudocodeGenerator {
             if (!instr.getOperands().isEmpty()) {
                 Operand op = instr.getOperands().get(0);
                 String expr = buildExpressionFromOperand(op, varCtx);
-                sb.append("return ").append(expr).append(";").append("\n");
+                sb.append("return ").append(expr).append(";\n");
             } else {
-                sb.append("return;").append("\n");
+                sb.append("return;\n");
             }
             return;
         }
@@ -151,7 +151,7 @@ public class PseudocodeGenerator {
         if (instr.getType() == InstructionType.CALL) {
             appendIndent(sb, indenter);
             String callExpr = buildCallExpression(instr, varCtx);
-            sb.append(callExpr).append(";").append("\n");
+            sb.append(callExpr).append(";\n");
             return;
         }
         if (instr.getType() == InstructionType.JUMP || instr.getType() == InstructionType.CONDITIONAL_JUMP) {
@@ -160,9 +160,9 @@ public class PseudocodeGenerator {
         appendIndent(sb, indenter);
         String expr = buildHighLevelExpression(instr, varCtx);
         if (expr == null || expr.isEmpty()) {
-            sb.append(";").append("\n");
+            sb.append(";\n");
         } else {
-            sb.append(expr).append(";").append("\n");
+            sb.append(expr).append(";\n");
         }
     }
 
@@ -176,10 +176,23 @@ public class PseudocodeGenerator {
             return dst + " = " + src;
         }
 
+        if (mnemonic.startsWith("lea") && ops.size() == 2) {
+            String dst = buildLValue(ops.get(0), varCtx);
+            String src = buildExpressionFromOperand(ops.get(1), varCtx);
+            return dst + " = &(" + src + ")";
+        }
+
         if ((mnemonic.startsWith("add") || mnemonic.startsWith("sub") || mnemonic.startsWith("mul") || mnemonic.startsWith("imul") || mnemonic.startsWith("and") || mnemonic.startsWith("or") || mnemonic.startsWith("xor")) && ops.size() == 2) {
             String dst = buildLValue(ops.get(0), varCtx);
             String src = buildExpressionFromOperand(ops.get(1), varCtx);
             String op = operatorForMnemonic(mnemonic);
+            return dst + " = " + dst + " " + op + " " + src;
+        }
+
+        if ((mnemonic.startsWith("shl") || mnemonic.startsWith("shr") || mnemonic.startsWith("sal") || mnemonic.startsWith("sar")) && ops.size() == 2) {
+            String dst = buildLValue(ops.get(0), varCtx);
+            String src = buildExpressionFromOperand(ops.get(1), varCtx);
+            String op = shiftOperatorForMnemonic(mnemonic);
             return dst + " = " + dst + " " + op + " " + src;
         }
 
@@ -197,6 +210,16 @@ public class PseudocodeGenerator {
             return dst + " = " + dst + " - 1";
         }
 
+        if (mnemonic.startsWith("neg") && ops.size() == 1) {
+            String dst = buildLValue(ops.get(0), varCtx);
+            return dst + " = -" + dst;
+        }
+
+        if (mnemonic.startsWith("not") && ops.size() == 1) {
+            String dst = buildLValue(ops.get(0), varCtx);
+            return dst + " = ~" + dst;
+        }
+
         if (mnemonic.startsWith("push") && ops.size() == 1) {
             return "";
         }
@@ -204,6 +227,18 @@ public class PseudocodeGenerator {
         if (mnemonic.startsWith("pop") && ops.size() == 1) {
             String dst = buildLValue(ops.get(0), varCtx);
             return dst + " = stack_pop()";
+        }
+
+        if (mnemonic.startsWith("str") && ops.size() == 2) {
+            String dst = buildLValue(ops.get(0), varCtx);
+            String src = buildExpressionFromOperand(ops.get(1), varCtx);
+            return "*(" + dst + ") = " + src;
+        }
+
+        if (mnemonic.startsWith("ldr") && ops.size() == 2) {
+            String dst = buildLValue(ops.get(0), varCtx);
+            String src = buildExpressionFromOperand(ops.get(1), varCtx);
+            return dst + " = *(" + src + ")";
         }
 
         return "";
@@ -217,6 +252,12 @@ public class PseudocodeGenerator {
         if (mnemonic.startsWith("or")) return "|";
         if (mnemonic.startsWith("xor")) return "^";
         return "+";
+    }
+
+    private String shiftOperatorForMnemonic(String mnemonic) {
+        if (mnemonic.startsWith("shl") || mnemonic.startsWith("sal")) return "<<";
+        if (mnemonic.startsWith("shr") || mnemonic.startsWith("sar")) return ">>";
+        return "<<";
     }
 
     private String buildCallExpression(Instruction instr, VariableContext varCtx) {
@@ -250,7 +291,14 @@ public class PseudocodeGenerator {
             return varCtx.variableForRegister(op.getText());
         }
         if (op.getType() == OperandType.IMMEDIATE) {
-            return String.valueOf(op.getValue());
+            long val = op.getValue();
+            if (val < 0) {
+                return String.valueOf(val);
+            } else if (val < 10) {
+                return String.valueOf(val);
+            } else {
+                return String.format("0x%X", val);
+            }
         }
         if (op.getType() == OperandType.MEMORY) {
             return varCtx.variableForMemory(op.getText(), op.getValue());
@@ -264,85 +312,100 @@ public class PseudocodeGenerator {
     private void emitIfThen(StructuredRegion region, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
         ConditionInfo cond = region.condition();
         appendIndent(sb, indenter);
-        sb.append("if (").append(cond.expression()).append(")").append("\n");
+        sb.append("if (").append(cond.expression()).append(")\n");
         appendIndent(sb, indenter);
-        sb.append("{").append("\n");
+        sb.append("{\n");
         indenter.indent();
         for (StructuredRegion child : region.children()) {
             emitRegion(child, sb, indenter, varCtx);
         }
         indenter.unindent();
         appendIndent(sb, indenter);
-        sb.append("}").append("\n");
+        sb.append("}\n");
     }
 
     private void emitIfThenElse(StructuredRegion region, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
         ConditionInfo cond = region.condition();
         appendIndent(sb, indenter);
-        sb.append("if (").append(cond.expression()).append(")").append("\n");
+        sb.append("if (").append(cond.expression()).append(")\n");
         appendIndent(sb, indenter);
-        sb.append("{").append("\n");
+        sb.append("{\n");
         indenter.indent();
         for (StructuredRegion child : region.trueChildren()) {
             emitRegion(child, sb, indenter, varCtx);
         }
         indenter.unindent();
         appendIndent(sb, indenter);
-        sb.append("}").append("\n");
+        sb.append("}\n");
         appendIndent(sb, indenter);
-        sb.append("else").append("\n");
+        sb.append("else\n");
         appendIndent(sb, indenter);
-        sb.append("{").append("\n");
+        sb.append("{\n");
         indenter.indent();
         for (StructuredRegion child : region.falseChildren()) {
             emitRegion(child, sb, indenter, varCtx);
         }
         indenter.unindent();
         appendIndent(sb, indenter);
-        sb.append("}").append("\n");
+        sb.append("}\n");
     }
 
     private void emitWhileLoop(StructuredRegion region, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
         ConditionInfo cond = region.condition();
         appendIndent(sb, indenter);
-        sb.append("while (").append(cond.expression()).append(")").append("\n");
+        sb.append("while (").append(cond.expression()).append(")\n");
         appendIndent(sb, indenter);
-        sb.append("{").append("\n");
+        sb.append("{\n");
         indenter.indent();
         for (StructuredRegion child : region.children()) {
             emitRegion(child, sb, indenter, varCtx);
         }
         indenter.unindent();
         appendIndent(sb, indenter);
-        sb.append("}").append("\n");
+        sb.append("}\n");
     }
 
     private void emitDoWhileLoop(StructuredRegion region, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
         appendIndent(sb, indenter);
-        sb.append("do").append("\n");
+        sb.append("do\n");
         appendIndent(sb, indenter);
-        sb.append("{").append("\n");
+        sb.append("{\n");
         indenter.indent();
         for (StructuredRegion child : region.children()) {
             emitRegion(child, sb, indenter, varCtx);
         }
         indenter.unindent();
         appendIndent(sb, indenter);
-        sb.append("} while (").append(region.condition().expression()).append(");").append("\n");
+        sb.append("} while (").append(region.condition().expression()).append(");\n");
     }
 
     private void emitInfiniteLoop(StructuredRegion region, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
         appendIndent(sb, indenter);
-        sb.append("while (true)").append("\n");
+        sb.append("while (true)\n");
         appendIndent(sb, indenter);
-        sb.append("{").append("\n");
+        sb.append("{\n");
         indenter.indent();
         for (StructuredRegion child : region.children()) {
             emitRegion(child, sb, indenter, varCtx);
         }
         indenter.unindent();
         appendIndent(sb, indenter);
-        sb.append("}").append("\n");
+        sb.append("}\n");
+    }
+
+    private void emitSwitch(StructuredRegion region, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
+        ConditionInfo cond = region.condition();
+        appendIndent(sb, indenter);
+        sb.append("switch (").append(cond.expression()).append(")\n");
+        appendIndent(sb, indenter);
+        sb.append("{\n");
+        indenter.indent();
+        for (StructuredRegion child : region.children()) {
+            emitRegion(child, sb, indenter, varCtx);
+        }
+        indenter.unindent();
+        appendIndent(sb, indenter);
+        sb.append("}\n");
     }
 
     private void emitLinearFallback(StructuredRegion region, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
@@ -364,12 +427,12 @@ public class PseudocodeGenerator {
     private String generateFallback(Function function) {
         StringBuilder sb = new StringBuilder();
         String functionName = formatFunctionName(function);
-        sb.append("int ").append(functionName).append("()").append("\n");
-        sb.append("{").append("\n");
-        sb.append("    ").append("while (true)").append("\n");
-        sb.append("    ").append("{").append("\n");
-        sb.append("        ").append("break;").append("\n");
-        sb.append("    ").append("}").append("\n");
+        sb.append("int ").append(functionName).append("()\n");
+        sb.append("{\n");
+        sb.append("    while (true)\n");
+        sb.append("    {\n");
+        sb.append("        break;\n");
+        sb.append("    }\n");
         sb.append("}");
         return sb.toString();
     }
@@ -532,10 +595,14 @@ class ControlFlowGraph {
     Map<Address, BasicBlock> getBlocks() {
         return blocks;
     }
+
+    Set<Address> getAllAddresses() {
+        return blocks.keySet();
+    }
 }
 
 enum StructuredRegionType {
-    SEQUENCE, BASIC_BLOCK, IF_THEN, IF_THEN_ELSE, WHILE_LOOP, DO_WHILE_LOOP, INFINITE_LOOP, UNKNOWN
+    SEQUENCE, BASIC_BLOCK, IF_THEN, IF_THEN_ELSE, WHILE_LOOP, DO_WHILE_LOOP, INFINITE_LOOP, SWITCH, UNKNOWN
 }
 
 record ConditionInfo(String expression) {
@@ -583,6 +650,10 @@ record StructuredRegion(StructuredRegionType type, BasicBlock block, List<Struct
         return new StructuredRegion(StructuredRegionType.INFINITE_LOOP, null, body, null, null, null);
     }
 
+    static StructuredRegion switchStmt(ConditionInfo cond, List<StructuredRegion> cases) {
+        return new StructuredRegion(StructuredRegionType.SWITCH, null, cases, cond, null, null);
+    }
+
     static StructuredRegion unknown(List<StructuredRegion> children) {
         return new StructuredRegion(StructuredRegionType.UNKNOWN, null, children, null, null, null);
     }
@@ -593,11 +664,131 @@ class StructureBuilder {
     static StructuredRegion buildStructuredRegion(ControlFlowGraph cfg, Address entry) {
         List<Address> order = new ArrayList<>(cfg.getBlocks().keySet());
         order.sort(Address::compareTo);
-        List<StructuredRegion> regions = new ArrayList<>();
+
+        if (order.isEmpty()) {
+            return StructuredRegion.sequence(List.of());
+        }
+
+        Map<Address, StructuredRegion> regionMap = new HashMap<>();
         for (Address addr : order) {
             BasicBlock block = cfg.getBlock(addr);
-            regions.add(StructuredRegion.basicBlock(block));
+            regionMap.put(addr, StructuredRegion.basicBlock(block));
         }
+
+        List<StructuredRegion> regions = new ArrayList<>();
+        Set<Address> processed = new HashSet<>();
+
+        for (Address addr : order) {
+            if (processed.contains(addr)) {
+                continue;
+            }
+
+            StructuredRegion region = detectStructure(addr, cfg, regionMap, processed);
+            if (region != null) {
+                regions.add(region);
+            }
+        }
+
         return StructuredRegion.sequence(regions);
+    }
+
+    private static StructuredRegion detectStructure(Address addr, ControlFlowGraph cfg, Map<Address, StructuredRegion> regionMap, Set<Address> processed) {
+        if (processed.contains(addr)) {
+            return null;
+        }
+
+        BasicBlock block = cfg.getBlock(addr);
+        if (block == null) {
+            return null;
+        }
+
+        processed.add(addr);
+
+        List<Address> successors = cfg.getSuccessors(addr);
+
+        if (successors.isEmpty()) {
+            return regionMap.get(addr);
+        }
+
+        if (successors.size() == 1) {
+            Address next = successors.get(0);
+            List<Address> predOfNext = cfg.getPredecessors(next);
+
+            if (predOfNext.size() == 1 && predOfNext.get(0).equals(addr)) {
+                List<StructuredRegion> seq = new ArrayList<>();
+                seq.add(regionMap.get(addr));
+                StructuredRegion nextRegion = detectStructure(next, cfg, regionMap, processed);
+                if (nextRegion != null) {
+                    seq.add(nextRegion);
+                }
+                return StructuredRegion.sequence(seq);
+            } else {
+                return regionMap.get(addr);
+            }
+        }
+
+        if (successors.size() == 2) {
+            Instruction lastInstr = getLastInstruction(block);
+            if (lastInstr != null && lastInstr.getType() == InstructionType.CONDITIONAL_JUMP) {
+                Address trueTarget = successors.get(0);
+                Address falseTarget = successors.get(1);
+
+                ConditionInfo cond = extractCondition(lastInstr);
+
+                StructuredRegion trueRegion = detectStructure(trueTarget, cfg, regionMap, processed);
+                StructuredRegion falseRegion = detectStructure(falseTarget, cfg, regionMap, processed);
+
+                List<StructuredRegion> seq = new ArrayList<>();
+                seq.add(regionMap.get(addr));
+
+                if (trueRegion != null && falseRegion != null) {
+                    seq.add(StructuredRegion.ifThenElse(cond, List.of(trueRegion), List.of(falseRegion)));
+                } else if (trueRegion != null) {
+                    seq.add(StructuredRegion.ifThen(cond, List.of(trueRegion)));
+                } else if (falseRegion != null) {
+                    seq.add(StructuredRegion.ifThen(cond, List.of(falseRegion)));
+                }
+
+                return StructuredRegion.sequence(seq);
+            }
+        }
+
+        return regionMap.get(addr);
+    }
+
+    private static Instruction getLastInstruction(BasicBlock block) {
+        if (block == null || block.getInstructions().isEmpty()) {
+            return null;
+        }
+        return block.getInstructions().get(block.getInstructions().size() - 1);
+    }
+
+    private static ConditionInfo extractCondition(Instruction instr) {
+        String mnemonic = instr.getMnemonic().toLowerCase();
+        String expr = "condition";
+
+        if (mnemonic.contains("jz") || mnemonic.contains("je")) {
+            expr = "v1 == 0";
+        } else if (mnemonic.contains("jnz") || mnemonic.contains("jne")) {
+            expr = "v1 != 0";
+        } else if (mnemonic.contains("jg") || mnemonic.contains("jgt")) {
+            expr = "v1 > v2";
+        } else if (mnemonic.contains("jl") || mnemonic.contains("jlt")) {
+            expr = "v1 < v2";
+        } else if (mnemonic.contains("jge")) {
+            expr = "v1 >= v2";
+        } else if (mnemonic.contains("jle")) {
+            expr = "v1 <= v2";
+        } else if (mnemonic.contains("beq")) {
+            expr = "v1 == v2";
+        } else if (mnemonic.contains("bne")) {
+            expr = "v1 != v2";
+        } else if (mnemonic.contains("bgt")) {
+            expr = "v1 > v2";
+        } else if (mnemonic.contains("blt")) {
+            expr = "v1 < v2";
+        }
+
+        return new ConditionInfo(expr);
     }
 }
