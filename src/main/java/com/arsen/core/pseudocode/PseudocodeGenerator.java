@@ -134,6 +134,14 @@ public class PseudocodeGenerator {
     }
 
     private void emitInstruction(Instruction instr, StringBuilder sb, Indenter indenter, VariableContext varCtx) {
+        if (instr.getType() == InstructionType.NOP) {
+            return;
+        }
+
+        if (instr.getType() == InstructionType.JUMP || instr.getType() == InstructionType.CONDITIONAL_JUMP) {
+            return;
+        }
+
         if (instr.getType() == InstructionType.RETURN) {
             appendIndent(sb, indenter);
             if (!instr.getOperands().isEmpty()) {
@@ -145,23 +153,17 @@ public class PseudocodeGenerator {
             }
             return;
         }
-        if (instr.getType() == InstructionType.NOP) {
-            return;
-        }
+
         if (instr.getType() == InstructionType.CALL) {
             appendIndent(sb, indenter);
             String callExpr = buildCallExpression(instr, varCtx);
             sb.append(callExpr).append(";\n");
             return;
         }
-        if (instr.getType() == InstructionType.JUMP || instr.getType() == InstructionType.CONDITIONAL_JUMP) {
-            return;
-        }
-        appendIndent(sb, indenter);
+
         String expr = buildHighLevelExpression(instr, varCtx);
-        if (expr == null || expr.isEmpty()) {
-            sb.append(";\n");
-        } else {
+        if (expr != null && !expr.isEmpty() && !expr.isBlank()) {
+            appendIndent(sb, indenter);
             sb.append(expr).append(";\n");
         }
     }
@@ -196,10 +198,6 @@ public class PseudocodeGenerator {
             return dst + " = " + dst + " " + op + " " + src;
         }
 
-        if ((mnemonic.startsWith("cmp") || mnemonic.startsWith("test")) && ops.size() == 2) {
-            return "";
-        }
-
         if (mnemonic.startsWith("inc") && ops.size() == 1) {
             String dst = buildLValue(ops.get(0), varCtx);
             return dst + " = " + dst + " + 1";
@@ -220,10 +218,6 @@ public class PseudocodeGenerator {
             return dst + " = ~" + dst;
         }
 
-        if (mnemonic.startsWith("push") && ops.size() == 1) {
-            return "";
-        }
-
         if (mnemonic.startsWith("pop") && ops.size() == 1) {
             String dst = buildLValue(ops.get(0), varCtx);
             return dst + " = stack_pop()";
@@ -241,7 +235,7 @@ public class PseudocodeGenerator {
             return dst + " = *(" + src + ")";
         }
 
-        return "";
+        return null;
     }
 
     private String operatorForMnemonic(String mnemonic) {
